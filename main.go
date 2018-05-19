@@ -430,12 +430,16 @@ func (b Bot) handleInvited(m *tb.Message) {
 		if err != nil {
 			log.Printf("Cannot get score: %s", err.Error())
 		}
-		invitedUser.LuckyNumber = text
-		err = b.storage.UpdateInviteUser(invitedUser)
+		invitedUser[0].LuckyNumber = text
+		err = b.storage.UpdateInviteUser(invitedUser[0])
 		if err != nil {
 			log.Printf("Cannot update lucky number: %s", err.Error())
 		}
-		b.bot.Send(m.Chat, fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé.", text))
+		message := fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé.", text)
+		if len(invitedUser) > 1 {
+			message += fmt.Sprintf("Con còn %d vé chọn số may mắn nhé.", len(invitedUser)-1)
+		}
+		b.bot.Send(m.Chat, message)
 		updateCurrentCommand("", m)
 	}
 }

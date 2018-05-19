@@ -255,14 +255,14 @@ func (storage *QuestionStorage) RemoveQuestion(id int64) error {
 }
 
 // GetInvitedUserWithoutLuckyNumber get user list so the bot can update lucky number for that user
-func (storage *QuestionStorage) GetInvitedUserWithoutLuckyNumber(userID int) (InviteUser, error) {
-	var invitedUser InviteUser
+func (storage *QuestionStorage) GetInvitedUserWithoutLuckyNumber(userID int) ([]InviteUser, error) {
+	var invitedUsers []InviteUser
 	query := storage.db.Select(q.And(q.Eq("UserID", userID), q.Eq("LuckyNumber", "")))
-	err := query.First(&invitedUser)
+	err := query.Find(&invitedUsers)
 	if err != nil {
 		log.Printf("Cannot get user: %s", err.Error())
 	}
-	return invitedUser, err
+	return invitedUsers, err
 }
 
 // InvitedUser get invited user
