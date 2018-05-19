@@ -171,7 +171,7 @@ func (b Bot) handleHelp(m *tb.Message) {
 	Con có thể /start để bắt đầu trả lời câu hỏi. Trả lời đúng hết cả 5 câu hỏi, Bụt sẽ thưởng cho con 1 "vé" để chọn số may mắn.
 	Con có thể mời bạn bè vào @%s, để được tặng thêm "vé" may mắn, tăng khả năng trúng thưởng nhé.
 	   
-	/me để xem bản thân được bao nhiêu điểm này,
+	/me để xem lại số vé may mắn con đã chọn,
 	/top để xem xem ai mời nhiều nhất nè
 	/who [số] để kiểm tra xem có ai chọn trùng số không.
 	/prize để xem danh sách quà tặng của Bụt nhé.`, chatGroup)
