@@ -282,13 +282,16 @@ func (b Bot) handleMe(m *tb.Message) {
 	if (score.ID != 0 && score.Valid == false) || (err == nil && invites[0].Valid == false) {
 		message += fmt.Sprintf("Rất tiếc con đã rời khỏi group @%s. Kết quả dưới đây của con không được tính. \n", chatGroup)
 	}
-	message += fmt.Sprintf("Con đã trả lời chính xác %d/5 câu hỏi và số may mắn con đã chọn là: %s\n", score.Score, score.LuckyNumber)
+	if score.Score == 5 {
+		message += fmt.Sprintf("Con đã trả lời chính xác %d/5 câu hỏi và số may mắn con đã chọn là: %s\n", score.Score, score.LuckyNumber)
+	} else {
+		message += fmt.Sprintf("Con đã trả lời chính xác %d/5 câu hỏi, con chưa được chọn số may mắn.\n", score.Score)
+	}
 	if err != nil && err.Error() == "not found" {
 		message += fmt.Sprintf("Con hãy mời thêm người bạn nào vào @%s để nhận được thêm vé may mắn nhé 🤗. \n", chatGroup)
 	} else {
 		message += fmt.Sprintf("Con đã mời: \n")
 		for _, user := range invites {
-			log.Printf("invites: %+v", user)
 			name := strings.TrimSpace(user.InvitedName)
 			message += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", name, user.InvitedID, user.LuckyNumber)
 		}
@@ -550,11 +553,8 @@ func (b Bot) finish(m *tb.Message) {
 }
 
 func (b Bot) handleAnswer(m *tb.Message, option int) {
-	log.Printf("%d", option)
 	currentQuestion, _ := b.storage.GetCurrentQuestion(m.Chat.ID)
-	log.Printf("%+v", currentQuestion)
 	current := questions[currentQuestion.Rands[currentQuestion.CurrentQuestion]]
-	log.Printf("%+v", current)
 	if option+1 > len(current.Options) {
 		b.bot.Send(m.Chat, fmt.Sprintf("Câu hỏi không có phương án con chọn."))
 		return
@@ -575,7 +575,6 @@ func (b Bot) handleAnswer(m *tb.Message, option int) {
 		score.Score++
 	}
 	b.storage.UpdateScore(m.Sender.ID, score)
-	log.Printf("Score: %d", score.Score)
 	currentQuestion.CurrentQuestion++
 	b.storage.UpdateQuestion(m.Chat.ID, currentQuestion)
 	b.next(m)
@@ -587,7 +586,6 @@ func (b Bot) checkRequirement(m *tb.Message) bool {
 		log.Printf("Cannot get chat by id %s: %s", chatGroup, err.Error())
 		return false
 	}
-	log.Printf("%+v", chat)
 	qualified, err := b.bot.ChatMemberOf(chat, m.Sender)
 	if err != nil {
 		log.Printf("Cannot get chat member of: %s", err.Error())

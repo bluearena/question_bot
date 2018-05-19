@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/asdine/storm"
 	"github.com/asdine/storm/q"
@@ -134,6 +135,13 @@ func (storage *QuestionStorage) RemoveScore(userID int) error {
 	return err
 }
 
+func Abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // Who Get list people who choose a lucky number (string)
 func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	result := []User{}
@@ -169,10 +177,8 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	storage.db.AllByIndex("LuckyNumber", &inviteUsers)
 	log.Printf("Score: %+v", scores)
 	log.Printf("Invites: %+v", inviteUsers)
-	user := NewUser(scores[0].ID, fmt.Sprintf("%s %s", scores[0].FirstName, scores[0].LastName), scores[0].LuckyNumber)
-	max := user
-	n := len(scores)
-	min := NewUser(scores[n-1].ID, fmt.Sprintf("%s %s", scores[n-1].FirstName, scores[n-1].LastName), scores[n-1].LuckyNumber)
+	max := NewUser(0, "", "0000")
+	min := NewUser(0, "", "9999")
 	for _, score := range scores {
 		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
 			min = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
@@ -183,18 +189,29 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	}
 	for _, score := range inviteUsers {
 		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
-			min = NewUser(score.ID, score.Name, score.LuckyNumber)
+			min = NewUser(score.UserID, score.Name, score.LuckyNumber)
 		}
 		if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
-			max = NewUser(score.ID, score.Name, score.LuckyNumber)
+			max = NewUser(score.UserID, score.Name, score.LuckyNumber)
 		}
 	}
-	result = append(result, min)
+	if min.ID != 0 {
+		if max.ID == 0 {
+			result = append(result, min)
+		} else {
+			intMin, _ := strconv.Atoi(min.LuckyNumber)
+			intMax, _ := strconv.Atoi(max.LuckyNumber)
+			intLucky, _ := strconv.Atoi(lucky)
+			if Abs(intMin-intLucky) < Abs(intMax-intLucky) {
+				result = append(result, min)
+			} else {
+				result = append(result, max)
+			}
+		}
+	}
+	log.Printf("Lucky: %+v", lucky)
 	log.Printf("Min: %+v", min)
 	log.Printf("Max: %+v", max)
-	if max.LuckyNumber != min.LuckyNumber {
-		result = append(result, max)
-	}
 	log.Printf("Result: %+v", result)
 	return result, err
 }
@@ -202,7 +219,6 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 // GetCurrentQuestion get current question for user
 func (storage *QuestionStorage) GetCurrentQuestion(id int64) (Question, error) {
 	var question Question
-	log.Printf("%d", id)
 	err := storage.db.One("ID", id, &question)
 	if err != nil {
 		log.Printf("Cannot get question: %s", err.Error())
@@ -217,12 +233,9 @@ func (storage *QuestionStorage) UpdateQuestion(id int64, question Question) erro
 		log.Printf("Cannot get current question: %s", err.Error())
 		err = storage.db.Save(&question)
 	} else {
-		log.Printf("What question: %+v", question)
 		err = storage.db.Update(&question)
 		log.Printf("Error: %s", err)
 	}
-	currentQuestion, _ := storage.GetCurrentQuestion(id)
-	log.Printf("current question: %+v", currentQuestion)
 	return err
 }
 
