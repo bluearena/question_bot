@@ -180,19 +180,23 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	max := NewUser(0, "", "0000")
 	min := NewUser(0, "", "9999")
 	for _, score := range scores {
-		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
-			min = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
-		}
-		if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
-			max = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
+		if score.Valid {
+			if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
+				min = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
+			}
+			if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
+				max = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
+			}
 		}
 	}
 	for _, score := range inviteUsers {
-		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
-			min = NewUser(score.UserID, score.Name, score.LuckyNumber)
-		}
-		if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
-			max = NewUser(score.UserID, score.Name, score.LuckyNumber)
+		if score.Valid {
+			if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
+				min = NewUser(score.UserID, score.Name, score.LuckyNumber)
+			}
+			if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
+				max = NewUser(score.UserID, score.Name, score.LuckyNumber)
+			}
 		}
 	}
 	if min.ID != 0 {
