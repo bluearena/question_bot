@@ -15,13 +15,15 @@ import (
 
 // BotConfig config for bot
 type BotConfig struct {
-	Key string `json:"bot_key"`
+	Key      string `json:"bot_key"`
+	Deadline int64  `json:"deadline"`
 }
 
 // Bot object
 type Bot struct {
-	bot     *tb.Bot
-	storage *QuestionStorage
+	bot      *tb.Bot
+	storage  *QuestionStorage
+	deadline int64
 }
 
 // Questions question list
@@ -77,8 +79,9 @@ func main() {
 	}
 	storage, err := NewBoltStorage()
 	mybot := Bot{
-		bot:     tbot,
-		storage: storage,
+		bot:      tbot,
+		storage:  storage,
+		deadline: botConfig.Deadline,
 	}
 	if err != nil {
 		log.Panic(err)
@@ -306,6 +309,10 @@ func (b Bot) handleMe(m *tb.Message) {
 }
 
 func (b Bot) handleAdd(m *tb.Message) {
+	if time.Now().Unix() > b.deadline {
+		b.bot.Reply(m, "Bụt rất tiếc, thời gian tham gia chương trình đã hết.")
+		return
+	}
 	if !m.Private() {
 		b.bot.Reply(m, "/add riêng cho Bụt để Bụt thêm số may mắn cho.")
 		return
@@ -602,6 +609,10 @@ func (b Bot) checkRequirement(m *tb.Message) bool {
 }
 
 func (b Bot) handleStart(m *tb.Message) {
+	if time.Now().Unix() > b.deadline {
+		b.bot.Reply(m, "Bụt rất tiếc, thời gian tham gia chương trình đã hết.")
+		return
+	}
 	// make sure user chat private to answer the question
 	if !m.Private() {
 		b.bot.Reply(m, "Con cần chat riêng với @KyberQuestionBot để trả lời câu hỏi vào tham gia bốc thăm may mắn :D")
