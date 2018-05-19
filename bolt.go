@@ -208,6 +208,8 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 				result = append(result, max)
 			}
 		}
+	} else if max.ID != 0 {
+		result = append(result, max)
 	}
 	log.Printf("Lucky: %+v", lucky)
 	log.Printf("Min: %+v", min)
