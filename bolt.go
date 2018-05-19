@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/asdine/storm/q"
-
 	"github.com/asdine/storm"
+	"github.com/asdine/storm/q"
 )
 
 // Question objects
@@ -26,6 +25,7 @@ type InviteUser struct {
 	Username        string
 	Name            string
 	InvitedName     string
+	Valid           bool
 }
 
 // Top user who invite most friend
@@ -33,6 +33,7 @@ type Top struct {
 	ID    int `storm:"id"`
 	Point int `storm:"index"`
 	Name  string
+	Valid bool
 }
 
 // Score of a user
@@ -43,6 +44,7 @@ type Score struct {
 	FirstName   string
 	LastName    string
 	LuckyNumber string `storm:"index"`
+	Valid       bool
 }
 
 // User for checking who
@@ -50,6 +52,15 @@ type User struct {
 	ID          int
 	Name        string
 	LuckyNumber string
+}
+
+// NewUser return a new user
+func NewUser(id int, name, lucky string) User {
+	return User{
+		ID:          id,
+		Name:        name,
+		LuckyNumber: lucky,
+	}
 }
 
 // QuestionStorage bot database
@@ -70,44 +81,53 @@ func NewBoltStorage() (*QuestionStorage, error) {
 	return storage, nil
 }
 
-func (self *QuestionStorage) GetUserScore(userID int) (Score, error) {
+// GetUserScore get user score
+func (storage *QuestionStorage) GetUserScore(userID int) (Score, error) {
 	var result Score
-	err := self.db.One("ID", userID, &result)
+	err := storage.db.One("ID", userID, &result)
 	if err != nil {
-		log.Printf("Cannot get user score: %s", err.Error())
+		log.Printf("Cannot get user %d score: %s", userID, err.Error())
 	}
 	return result, err
 }
 
-func (self *QuestionStorage) UpdateScore(userID int, newScore Score) error {
+// UpdateScore update user score
+func (storage *QuestionStorage) UpdateScore(userID int, newScore Score) error {
 	var score Score
-	err := self.db.One("ID", userID, &score)
+	err := storage.db.One("ID", userID, &score)
 
 	if err == storm.ErrNotFound {
 		log.Printf("%+v", newScore)
-		err := self.db.Save(&newScore)
+		err := storage.db.Save(&newScore)
 		if err != nil {
 			log.Printf("Cannot save score: %s", err.Error())
 		}
 	} else {
 		log.Printf("%+v", newScore)
-		err := self.db.Update(&newScore)
+		err := storage.db.Update(&newScore)
 		if err != nil {
 			log.Printf("Cannot update score:  %s", err.Error())
+		}
+		if newScore.Valid == false {
+			err = storage.db.UpdateField(&newScore, "Valid", false)
+			if err != nil {
+				log.Printf("Cannot update score valid:  %s", err.Error())
+			}
 		}
 	}
 	return err
 }
 
-func (self *QuestionStorage) RemoveScore(userID int) error {
+// RemoveScore remove user score from db
+func (storage *QuestionStorage) RemoveScore(userID int) error {
 	var score Score
-	err := self.db.One("ID", userID, &score)
+	err := storage.db.One("ID", userID, &score)
 
 	if err == storm.ErrNotFound {
 		return nil
 	}
 	log.Printf("%+v", score)
-	err = self.db.DeleteStruct(&score)
+	err = storage.db.DeleteStruct(&score)
 	if err != nil {
 		log.Printf("Cannot remove score: %s", err.Error())
 	}
@@ -115,128 +135,116 @@ func (self *QuestionStorage) RemoveScore(userID int) error {
 }
 
 // Who Get list people who choose a lucky number (string)
-func (self *QuestionStorage) Who(lucky string) ([]User, error) {
+func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	result := []User{}
 	var scores []Score
 	var inviteUsers []InviteUser
-	err := self.db.Find("LuckyNumber", lucky, &scores)
+	err := storage.db.Find("LuckyNumber", lucky, &scores)
 	if err != nil {
 		log.Printf("Cannot find lucky number: %s", err.Error())
 	}
 
-	err = self.db.Find("LuckyNumber", lucky, &inviteUsers)
+	err = storage.db.Find("LuckyNumber", lucky, &inviteUsers)
 	if err != nil {
 		log.Printf("Cannot find lucky number from top: %s", err.Error())
 	}
-	if len(inviteUsers) == 0 && len(scores) == 0 {
-		self.db.AllByIndex("LuckyNumber", &scores)
-		self.db.AllByIndex("LuckyNumber", &inviteUsers)
-		max := User{
-			ID:          scores[0].ID,
-			Name:        fmt.Sprintf("%s %s", scores[0].FirstName, scores[0].LastName),
-			LuckyNumber: scores[0].LuckyNumber,
+	for _, score := range scores {
+		if score.Valid == false {
+			continue
 		}
-		n := len(scores)
-		min := User{
-			ID:          scores[n-1].ID,
-			Name:        fmt.Sprintf("%s %s", scores[n-1].FirstName, scores[n-1].LastName),
-			LuckyNumber: scores[n-1].LuckyNumber,
+		user := NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
+		result = append(result, user)
+	}
+	for _, invite := range inviteUsers {
+		if invite.Valid == false {
+			continue
 		}
-		for _, score := range scores {
-			if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
-				min = User{
-					ID:          score.ID,
-					Name:        fmt.Sprintf("%s %s", score.FirstName, score.LastName),
-					LuckyNumber: score.LuckyNumber,
-				}
-			}
-			if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
-				max = User{
-					ID:          score.ID,
-					Name:        fmt.Sprintf("%s %s", score.FirstName, score.LastName),
-					LuckyNumber: score.LuckyNumber,
-				}
-			}
+		user := NewUser(invite.UserID, invite.Name, invite.LuckyNumber)
+		result = append(result, user)
+	}
+	if len(result) != 0 {
+		return result, err
+	}
+	storage.db.AllByIndex("LuckyNumber", &scores)
+	storage.db.AllByIndex("LuckyNumber", &inviteUsers)
+	log.Printf("Score: %+v", scores)
+	log.Printf("Invites: %+v", inviteUsers)
+	user := NewUser(scores[0].ID, fmt.Sprintf("%s %s", scores[0].FirstName, scores[0].LastName), scores[0].LuckyNumber)
+	max := user
+	n := len(scores)
+	min := NewUser(scores[n-1].ID, fmt.Sprintf("%s %s", scores[n-1].FirstName, scores[n-1].LastName), scores[n-1].LuckyNumber)
+	for _, score := range scores {
+		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
+			min = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
 		}
-		for _, score := range inviteUsers {
-			if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
-				min = User{
-					ID:          score.ID,
-					Name:        score.Name,
-					LuckyNumber: score.LuckyNumber,
-				}
-			}
-			if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
-				max = User{
-					ID:          score.ID,
-					Name:        score.Name,
-					LuckyNumber: score.LuckyNumber,
-				}
-			}
-		}
-		result = append(result, min)
-		result = append(result, max)
-	} else {
-		for _, score := range scores {
-			result = append(result, User{
-				ID:          score.ID,
-				Name:        fmt.Sprintf("%s %s", score.FirstName, score.LastName),
-				LuckyNumber: score.LuckyNumber,
-			})
-		}
-		for _, invite := range inviteUsers {
-			result = append(result, User{
-				ID:          invite.UserID,
-				Name:        invite.Name,
-				LuckyNumber: invite.LuckyNumber,
-			})
+		if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
+			max = NewUser(score.ID, fmt.Sprintf("%s %s", score.FirstName, score.LastName), score.LuckyNumber)
 		}
 	}
+	for _, score := range inviteUsers {
+		if score.LuckyNumber > lucky && min.LuckyNumber > score.LuckyNumber {
+			min = NewUser(score.ID, score.Name, score.LuckyNumber)
+		}
+		if score.LuckyNumber < lucky && max.LuckyNumber < score.LuckyNumber {
+			max = NewUser(score.ID, score.Name, score.LuckyNumber)
+		}
+	}
+	result = append(result, min)
+	log.Printf("Min: %+v", min)
+	log.Printf("Max: %+v", max)
+	if max.LuckyNumber != min.LuckyNumber {
+		result = append(result, max)
+	}
+	log.Printf("Result: %+v", result)
 	return result, err
 }
 
-func (self *QuestionStorage) GetCurrentQuestion(id int64) (Question, error) {
+// GetCurrentQuestion get current question for user
+func (storage *QuestionStorage) GetCurrentQuestion(id int64) (Question, error) {
 	var question Question
 	log.Printf("%d", id)
-	err := self.db.One("ID", id, &question)
+	err := storage.db.One("ID", id, &question)
 	if err != nil {
 		log.Printf("Cannot get question: %s", err.Error())
 	}
 	return question, err
 }
 
-func (self *QuestionStorage) UpdateQuestion(id int64, question Question) error {
-	_, err := self.GetCurrentQuestion(id)
+// UpdateQuestion update current question
+func (storage *QuestionStorage) UpdateQuestion(id int64, question Question) error {
+	_, err := storage.GetCurrentQuestion(id)
 	if err != nil {
 		log.Printf("Cannot get current question: %s", err.Error())
-		err = self.db.Save(&question)
+		err = storage.db.Save(&question)
 	} else {
 		log.Printf("What question: %+v", question)
-		err = self.db.Update(&question)
+		err = storage.db.Update(&question)
 		log.Printf("Error: %s", err)
 	}
-	currentQuestion, _ := self.GetCurrentQuestion(id)
+	currentQuestion, _ := storage.GetCurrentQuestion(id)
 	log.Printf("current question: %+v", currentQuestion)
 	return err
 }
 
-func (self *QuestionStorage) RemoveQuestion(id int64) error {
-	current, err := self.GetCurrentQuestion(id)
+// RemoveQuestion remove question list to restart
+func (storage *QuestionStorage) RemoveQuestion(id int64) error {
+	current, err := storage.GetCurrentQuestion(id)
 	if err != nil {
 		log.Printf("Cannot get question.")
 		return err
 	}
 	log.Printf("Remove question: %+v", current)
-	err = self.db.DeleteStruct(&current)
+	err = storage.db.DeleteStruct(&current)
 	if err != nil {
 		log.Printf("Cannot remove question: %s", err.Error())
 	}
 	return err
 }
 
-func (self *QuestionStorage) GetInvitedUserWithoutLuckyNumber(userID int) (InviteUser, error) {
+// GetInvitedUserWithoutLuckyNumber get user list so the bot can update lucky number for that user
+func (storage *QuestionStorage) GetInvitedUserWithoutLuckyNumber(userID int) (InviteUser, error) {
 	var invitedUser InviteUser
-	query := self.db.Select(q.And(q.Eq("UserID", userID), q.Eq("LuckyNumber", "")))
+	query := storage.db.Select(q.And(q.Eq("UserID", userID), q.Eq("LuckyNumber", "")))
 	err := query.First(&invitedUser)
 	if err != nil {
 		log.Printf("Cannot get user: %s", err.Error())
@@ -244,59 +252,72 @@ func (self *QuestionStorage) GetInvitedUserWithoutLuckyNumber(userID int) (Invit
 	return invitedUser, err
 }
 
-func (self *QuestionStorage) InvitedUser(userID int, invitedUser InviteUser) error {
-	err := self.db.Save(&invitedUser)
+// InvitedUser get invited user
+func (storage *QuestionStorage) InvitedUser(userID int, invitedUser InviteUser) error {
+	err := storage.db.Save(&invitedUser)
 	if err != nil {
 		log.Printf("Cannot add invited user: %s", err.Error())
 	}
 	return err
 }
 
-func (self *QuestionStorage) UpdateInviteUser(invitedUser InviteUser) error {
-	err := self.db.Update(&invitedUser)
+// UpdateInviteUser update lucky number to invite user
+func (storage *QuestionStorage) UpdateInviteUser(invitedUser InviteUser) error {
+	err := storage.db.Update(&invitedUser)
 	if err != nil {
 		log.Printf("Cannot update invited user: %s", err.Error())
+	}
+	if invitedUser.Valid == false {
+		err = storage.db.UpdateField(&invitedUser, "Valid", false)
+		if err != nil {
+			log.Printf("Cannot update invited valid: %s", err.Error())
+		}
 	}
 	return err
 }
 
-func (self *QuestionStorage) RemoveUser(userLeftID int) error {
+// RemoveUser remove a user
+func (storage *QuestionStorage) RemoveUser(userLeftID int) error {
 	var userLeft InviteUser
-	err := self.db.One("InvitedID", userLeftID, &userLeft)
+	err := storage.db.One("InvitedID", userLeftID, &userLeft)
 	if err != nil {
 		log.Printf("Cannot get user left: %s", err.Error())
 		return err
 	}
-	self.db.DeleteStruct(&userLeft)
+	storage.db.DeleteStruct(&userLeft)
 	return err
 }
 
-func (self *QuestionStorage) GetInvitedUser(userID int) ([]InviteUser, error) {
+// GetInvitedUser Get a user
+func (storage *QuestionStorage) GetInvitedUser(userID int) ([]InviteUser, error) {
 	var users []InviteUser
-	err := self.db.Find("UserID", userID, &users)
+	err := storage.db.Find("UserID", userID, &users)
 	if err != nil {
 		log.Printf("Cannot get invited user: %s", err.Error())
 	}
 	return users, err
 }
 
-func (self *QuestionStorage) GetInvitedUserByInvitedID(invitedID int) (InviteUser, error) {
+// GetInvitedUserByInvitedID get invited user by invited id
+func (storage *QuestionStorage) GetInvitedUserByInvitedID(invitedID int) (InviteUser, error) {
 	var user InviteUser
-	err := self.db.One("InvitedID", invitedID, &user)
+	err := storage.db.One("InvitedID", invitedID, &user)
 	if err != nil {
 		log.Printf("Cannot get invited user")
 	}
 	return user, err
 }
 
-func (self *QuestionStorage) UpdateTop(userID int, username string, point int) error {
+// UpdateTop update top point
+func (storage *QuestionStorage) UpdateTop(userID int, username string, point int) error {
 	var top Top
-	err := self.db.One("ID", userID, &top)
+	err := storage.db.One("ID", userID, &top)
 	if err != nil {
 		top.ID = userID
 		top.Point += point
 		top.Name = username
-		err = self.db.Save(&top)
+		top.Valid = true
+		err = storage.db.Save(&top)
 		if err != nil {
 			log.Printf("Cannot save top point: %s", err.Error())
 		} else {
@@ -304,7 +325,7 @@ func (self *QuestionStorage) UpdateTop(userID int, username string, point int) e
 		}
 	} else {
 		point := top.Point + point
-		err = self.db.UpdateField(&top, "Point", point)
+		err = storage.db.UpdateField(&top, "Point", point)
 		if err != nil {
 			log.Printf("Cannot update top point: %s", err.Error())
 		} else {
@@ -314,8 +335,31 @@ func (self *QuestionStorage) UpdateTop(userID int, username string, point int) e
 	return err
 }
 
-func (self *QuestionStorage) GetTop() ([]Top, error) {
+// GetTop get top point
+func (storage *QuestionStorage) GetTop() ([]Top, error) {
 	var tops []Top
-	err := self.db.AllByIndex("Point", &tops)
+	err := storage.db.AllByIndex("Point", &tops)
 	return tops, err
+}
+
+// GetTopByUserID get top by user id
+func (storage *QuestionStorage) GetTopByUserID(userID int) (Top, error) {
+	var top Top
+	err := storage.db.One("ID", userID, &top)
+	return top, err
+}
+
+// UpdateTopObject update top object
+func (storage *QuestionStorage) UpdateTopObject(top Top) error {
+	err := storage.db.Update(&top)
+	if err != nil {
+		log.Printf("Cannot update top object: %s", err.Error())
+	}
+	if top.Valid == false {
+		err = storage.db.UpdateField(&top, "Valid", false)
+		if err != nil {
+			log.Printf("Cannot update top valid:  %s", err.Error())
+		}
+	}
+	return err
 }

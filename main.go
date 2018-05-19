@@ -128,12 +128,10 @@ func main() {
 	})
 
 	mybot.bot.Handle(tb.OnUserJoined, func(m *tb.Message) {
-		log.Printf("User joined: %+v", m.Chat)
 		mybot.handleUserJoined(m)
 	})
 
 	mybot.bot.Handle(tb.OnUserLeft, func(m *tb.Message) {
-		log.Printf("User left: %+v", m)
 		mybot.handleUserLeft(m)
 	})
 
@@ -145,17 +143,38 @@ func main() {
 		mybot.handleHelp(m)
 	})
 
+	mybot.bot.Handle("/prize", func(m *tb.Message) {
+		mybot.handlePrize(m)
+	})
+
 	mybot.bot.Start()
+}
+
+func (b Bot) handlePrize(m *tb.Message) {
+	message := fmt.Sprintf(`Con thân mến, cơ cấu giải thưởng của chương trình như sau:
+
+		⭐️️️ Ta có *15 giải* cho những người có vé số may mắn trong đó:
+
+			💰 5 Giải đặc biệt mỗi giải 100 KNC
+			💰 10 Giải mỗi giải 10 KNC
+		
+		⭐ Ngoài ra còn có *5 Giải* "cống hiến" mỗi giải là 40 KNC dành cho 5 thành viên mời được nhiều bạn tham gia nhất
+
+	Chúc con may mắn 😉`)
+	b.bot.Send(m.Chat, message, &tb.SendOptions{
+		// ParseMode: tb.ModeMarkdown,
+	})
 }
 
 func (b Bot) handleHelp(m *tb.Message) {
 	message := fmt.Sprintf(`Chào con, Bụt đây.
-	Con có thể /start để bắt đầu trả lời câu hỏi. Trả lời đúng hết cả 5 câu hỏi của Bụt để được chọn số may mắn.
-	Mời bạn bè vào @%s, để được chọn thêm số may mắn, tăng khả năng trúng thưởng.
-	5 người mời nhiều người nhất sẽ có quà nhé.
+	Con có thể /start để bắt đầu trả lời câu hỏi. Trả lời đúng hết cả 5 câu hỏi, Bụt sẽ thưởng cho con 1 "vé" để chọn số may mắn.
+	Con có thể mời bạn bè vào @%s, để được tặng thêm "vé" may mắn, tăng khả năng trúng thưởng nhé.
+	   
 	/me để xem bản thân được bao nhiêu điểm này,
 	/top để xem xem ai mời nhiều nhất nè
-	/who [số] để kiểm tra xem có ai chọn trùng số không.`, chatGroup)
+	/who [số] để kiểm tra xem có ai chọn trùng số không.
+	/prize để xem danh sách quà tặng của Bụt nhé.`, chatGroup)
 	b.bot.Send(m.Chat, message)
 }
 
@@ -166,11 +185,64 @@ func updateCurrentCommand(command string, m *tb.Message) {
 	lucky[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] = command
 }
 
+func (b Bot) activateUser(userID int) error {
+	// activate score
+	score, err := b.storage.GetUserScore(userID)
+	if err == nil {
+		score.Valid = true
+		b.storage.UpdateScore(userID, score)
+	}
+	// activate invite member
+	inviteUsers, err := b.storage.GetInvitedUser(userID)
+	if err == nil {
+		for _, user := range inviteUsers {
+			user.Valid = true
+			b.storage.UpdateInviteUser(user)
+		}
+	}
+	// activate top score
+	top, err := b.storage.GetTopByUserID(userID)
+	if err == nil {
+		top.Valid = true
+		b.storage.UpdateTopObject(top)
+	}
+	return err
+}
+
+func (b Bot) deactivateUser(userID int) error {
+	var err error
+	// deactivate score
+	score, err := b.storage.GetUserScore(userID)
+	if err == nil {
+		score.Valid = false
+		b.storage.UpdateScore(userID, score)
+	}
+	// deactivate invite member
+	inviteUsers, err := b.storage.GetInvitedUser(userID)
+	if err == nil {
+		for _, user := range inviteUsers {
+			user.Valid = false
+			b.storage.UpdateInviteUser(user)
+		}
+	}
+	// deactivate top score
+	top, err := b.storage.GetTopByUserID(userID)
+	if err == nil {
+		top.Valid = false
+		b.storage.UpdateTopObject(top)
+	}
+	return err
+}
+
 func (b Bot) handleUserJoined(m *tb.Message) {
-	if m.Sender.ID == m.UserJoined.ID || m.Chat.Username != chatGroup {
+	if m.Chat.Username != chatGroup {
 		return
 	}
-	message := "Bạn đã add "
+	if m.Sender.ID == m.UserJoined.ID {
+		b.activateUser(m.UserJoined.ID)
+		return
+	}
+	message := "Con đã add "
 	for _, user := range m.UsersJoined {
 		name := fmt.Sprintf("%s %s", m.Sender.FirstName, m.Sender.LastName)
 		invitedName := fmt.Sprintf("%s %s", user.FirstName, user.LastName)
@@ -183,34 +255,47 @@ func (b Bot) handleUserJoined(m *tb.Message) {
 			InvitedUsername: user.Username,
 			Name:            name,
 			InvitedName:     invitedName,
+			Valid:           true,
 		}
 		b.storage.InvitedUser(m.Sender.ID, inviteUser)
 		b.storage.UpdateTop(m.Sender.ID, name, 1)
 	}
-	message += fmt.Sprintf(" vào group @%s. Bạn được thêm %d lần chọn số may mắn. Bạn có thể /add để thêm số may mắn.", chatGroup, len(m.UsersJoined))
+	message += fmt.Sprintf(" vào group @%s. Con được thêm %d lần chọn số may mắn. Con có thể /add để thêm số may mắn nhé.", chatGroup, len(m.UsersJoined))
 	b.bot.Send(m.Sender, message, &tb.SendOptions{
 		ParseMode: tb.ModeMarkdown,
 	})
+
+	// update valid if this user used to be in the group (and join the campaign)
+	for _, user := range m.UsersJoined {
+		b.activateUser(user.ID)
+	}
 }
 
 func (b Bot) handleMe(m *tb.Message) {
 	if !m.Private() {
-		b.bot.Reply(m, "Chúng tôi sẽ trả lời riêng cho bạn.")
+		b.bot.Reply(m, "Bụt sẽ trả lời riêng cho con.")
 	}
+	message := ""
 	score, _ := b.storage.GetUserScore(m.Sender.ID)
-	message := fmt.Sprintf("Trả lời câu hỏi: %d/5, số may mắn: %s\n", score.Score, score.LuckyNumber)
 	invites, err := b.storage.GetInvitedUser(m.Sender.ID)
+	log.Printf("Score: %+v", score)
+	if (score.ID != 0 && score.Valid == false) || (err == nil && invites[0].Valid == false) {
+		message += fmt.Sprintf("Rất tiếc con đã rời khỏi group @%s. Kết quả dưới đây của con không được tính. \n", chatGroup)
+	}
+	message += fmt.Sprintf("Con đã trả lời chính xác %d/5 câu hỏi và số may mắn con đã chọn là: %s\n", score.Score, score.LuckyNumber)
 	if err != nil && err.Error() == "not found" {
-		message += fmt.Sprintf("Bạn chưa mời thêm người bạn nào vào @%s. \n", chatGroup)
+		message += fmt.Sprintf("Con hãy mời thêm người bạn nào vào @%s để nhận được thêm vé may mắn nhé 🤗. \n", chatGroup)
 	} else {
-		message += fmt.Sprintf("Bạn đã mời: \n")
+		message += fmt.Sprintf("Con đã mời: \n")
 		for _, user := range invites {
-			message += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", user.InvitedName, user.InvitedID, user.LuckyNumber)
+			log.Printf("invites: %+v", user)
+			name := strings.TrimSpace(user.InvitedName)
+			message += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", name, user.InvitedID, user.LuckyNumber)
 		}
 	}
 	_, err = b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 	if err == nil {
-		message += fmt.Sprintf("Bạn có thể /add để thêm số may mắn.")
+		message += fmt.Sprintf("Con có thể /add để thêm số may mắn.")
 	}
 	b.bot.Send(m.Sender, message, &tb.SendOptions{
 		ParseMode: tb.ModeMarkdown,
@@ -219,55 +304,71 @@ func (b Bot) handleMe(m *tb.Message) {
 
 func (b Bot) handleAdd(m *tb.Message) {
 	if !m.Private() {
-		b.bot.Reply(m, "Chúng tôi sẽ trả lời riêng cho bạn.")
+		b.bot.Reply(m, "/add riêng cho Bụt để Bụt thêm số may mắn cho.")
+		return
 	}
 	_, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 	if err == nil {
 		updateCurrentCommand("invited", m)
 		b.bot.Send(m.Sender, "Điền 4 chữ số may mắn: ")
 	} else {
-		b.bot.Send(m.Sender, "Bạn không còn lượt chọn số may mắn nào.")
+		b.bot.Send(m.Sender, "Con không còn vé nào để chọn số may mắn.")
 	}
 }
 
 func (b Bot) handleTop(m *tb.Message) {
 	users, err := b.storage.GetTop()
 	if err == nil {
-		log.Printf("Top: %+v", users)
-		message := "Top 5 người invite nhiều nhất: \n"
+		message := "Top 5 người mời nhiều bạn bè nhất: \n"
 		count := 0
 		for i := len(users); i > 0; i-- {
+			log.Printf("Invites: %+v", users[i-1])
+			if users[i-1].Valid == false {
+				continue
+			}
 			if count++; count > 5 {
 				break
 			}
-			message += fmt.Sprintf("[%s](tg://user?id=%d) - điểm: %d\n", users[i-1].Name, users[i-1].ID, users[i-1].Point)
+			message += fmt.Sprintf("[%s](tg://user?id=%d) - %d người\n", users[i-1].Name, users[i-1].ID, users[i-1].Point)
+		}
+		if count == 0 {
+			message += "Chưa có ai trong danh sách top"
 		}
 		b.bot.Send(m.Chat, message, &tb.SendOptions{
 			ParseMode: tb.ModeMarkdown,
 		})
 	} else {
-		log.Printf("Top error: %s", err.Error())
 		b.bot.Send(m.Chat, "Chưa có ai trong danh sách top")
 	}
 }
 
 func (b Bot) handleUserLeft(m *tb.Message) {
-	// TODO: if user left remove all their point
 	if m.Chat.Username != chatGroup {
 		return
 	}
-	exist, err := b.storage.GetInvitedUserByInvitedID(m.UserLeft.ID)
-	if err == nil {
-		b.storage.RemoveUser(m.UserLeft.ID)
-		message := fmt.Sprintf("[%s](tg://user?id=%d) đã rời khỏi group @%s. Số may mắn bạn chọn cho [%s](tg://user?id=%d) đã bị hủy.", exist.InvitedName, exist.InvitedID, chatGroup, exist.InvitedName, exist.InvitedID)
-		user := tb.User{
-			ID: exist.UserID,
+	b.deactivateUser(m.UserLeft.ID)
+	receiver := tb.User{}
+	message := ""
+	if m.UserLeft.ID == m.Sender.ID {
+		receiver = tb.User{
+			ID: m.UserLeft.ID,
 		}
-		b.storage.UpdateTop(exist.UserID, exist.Username, -1)
-		b.bot.Send(&user, message, &tb.SendOptions{
-			ParseMode: tb.ModeMarkdown,
-		})
+		message = fmt.Sprintf("Sao con lại rời khỏi group @%s. Buồn quá, Bụt phải cho con ra khỏi danh sách nhận quà rồi 😢", chatGroup)
+	} else {
+		exist, err := b.storage.GetInvitedUserByInvitedID(m.UserLeft.ID)
+		if err == nil {
+			b.storage.RemoveUser(m.UserLeft.ID)
+			message = fmt.Sprintf("[%s](tg://user?id=%d) đã rời khỏi group @%s. Số may mắn con chọn cho [%s](tg://user?id=%d) đã không còn hiệu lực nữa.",
+				exist.InvitedName, exist.InvitedID, chatGroup, exist.InvitedName, exist.InvitedID)
+			receiver = tb.User{
+				ID: exist.UserID,
+			}
+			b.storage.UpdateTop(exist.UserID, exist.Username, -1)
+		}
 	}
+	b.bot.Send(&receiver, message, &tb.SendOptions{
+		ParseMode: tb.ModeMarkdown,
+	})
 }
 
 func (b Bot) initReplyKeys(questionOptions []string) [][]tb.ReplyButton {
@@ -301,6 +402,14 @@ func (b Bot) handleText(m *tb.Message) {
 		b.handleCheckWho(m, m.Text)
 	case "invited":
 		b.handleInvited(m)
+	default:
+		b.handleDefault(m)
+	}
+}
+
+func (b Bot) handleDefault(m *tb.Message) {
+	if m.Private() {
+		b.bot.Send(m.Chat, `Con nói gì Bụt không hiểu. Bấm /help để nhận được hướng dẫn nhé.`)
 	}
 }
 
@@ -312,7 +421,7 @@ func (b Bot) handleInvited(m *tb.Message) {
 		log.Printf("Cannot match: %s", err.Error())
 	}
 	if !matched {
-		b.bot.Reply(m, fmt.Sprintf("Bạn phải gửi 4 chữ số."))
+		b.bot.Reply(m, fmt.Sprintf("Con phải gửi 4 chữ số thì Bụt mới lưu lại được."))
 	} else {
 		invitedUser, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 		if err != nil {
@@ -323,7 +432,7 @@ func (b Bot) handleInvited(m *tb.Message) {
 		if err != nil {
 			log.Printf("Cannot update lucky number: %s", err.Error())
 		}
-		b.bot.Send(m.Chat, fmt.Sprintf("Con số may mắn bạn đã chọn là: %s, chúng tôi sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc.", text))
+		b.bot.Send(m.Chat, fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé.", text))
 		updateCurrentCommand("", m)
 	}
 }
@@ -335,7 +444,7 @@ func (b Bot) handleUpateLucky(m *tb.Message) {
 		log.Printf("Cannot match: %s", err.Error())
 	}
 	if !matched {
-		b.bot.Reply(m, fmt.Sprintf("Bạn phải gửi 4 chữ số."))
+		b.bot.Reply(m, fmt.Sprintf("Con phải gửi 4 chữ số thì Bụt mới lưu lại được."))
 	} else {
 		score, err := b.storage.GetUserScore(m.Sender.ID)
 		if err != nil {
@@ -347,7 +456,7 @@ func (b Bot) handleUpateLucky(m *tb.Message) {
 			log.Printf("Cannot update lucky number: %s", err.Error())
 		}
 		score, _ = b.storage.GetUserScore(m.Sender.ID)
-		b.bot.Send(m.Chat, fmt.Sprintf("Con số may mắn bạn đã chọn là: %s, chúng tôi sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc.", score.LuckyNumber))
+		b.bot.Send(m.Chat, fmt.Sprintf("Số may mắn con đã chọn là: %s, bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc.", score.LuckyNumber))
 		updateCurrentCommand("", m)
 	}
 }
@@ -360,20 +469,29 @@ func (b Bot) handleCheckWho(m *tb.Message, luckyNumber string) {
 		log.Printf("Cannot match lucky string: %s", err.Error())
 	}
 	if !matched {
-		b.bot.Reply(m, fmt.Sprintf("Bạn phải gửi 4 chữ số để kiểm tra người may mắn."))
+		b.bot.Reply(m, fmt.Sprintf("Con phải gửi 4 chữ số thì Bụt mới tìm được."))
 	} else {
 		updateCurrentCommand("", m)
 		users, err := b.storage.Who(luckyStr)
 		if err != nil && err.Error() != "not found" {
 			log.Printf("Cannot get user: %s", err)
 		}
-		if err != nil && err.Error() == "not found" {
-			b.bot.Reply(m, fmt.Sprintf("Chưa có người dùng nào chọn số %s.", luckyStr))
-			return
+		// if err != nil && err.Error() == "not found" {
+		// 	b.bot.Reply(m, fmt.Sprintf("Chưa có người dùng nào chọn số %s.", luckyStr))
+		// 	return
+		// }
+		message := ""
+		if len(users) != 0 {
+			if users[0].LuckyNumber == luckyStr {
+				message = fmt.Sprintf("Danh sách những người đã chọn số %s: \n\n", luckyStr)
+			} else {
+				message = fmt.Sprintf("Chưa có ai chọn số %s, người chọn gần nhất là: \n\n", luckyStr)
+			}
+		} else {
+			message = fmt.Sprintf("Chưa có ai trong danh sách.")
 		}
-		message := fmt.Sprintf("Danh sách những người đã chọn số %s: \n\n", luckyStr)
 		for _, user := range users {
-			message += fmt.Sprintf("[%s](tg://user?id=%d) \n", user.Name, user.ID)
+			message += fmt.Sprintf("[%s](tg://user?id=%d) - số đã chọn: %s \n", user.Name, user.ID, user.LuckyNumber)
 		}
 		b.bot.Reply(m, message, &tb.SendOptions{
 			ParseMode: tb.ModeMarkdown,
@@ -401,7 +519,7 @@ func (b Bot) next(m *tb.Message) {
 		if len(question.Options) == 2 {
 			replyKeys = replyKeysTwo
 		}
-		b.bot.Send(m.Chat, message, &tb.SendOptions{
+		b.bot.Send(m.Sender, message, &tb.SendOptions{
 			DisableWebPagePreview: true,
 			ParseMode:             tb.ModeMarkdown,
 			ReplyMarkup: &tb.ReplyMarkup{
@@ -415,12 +533,12 @@ func (b Bot) next(m *tb.Message) {
 
 func (b Bot) finish(m *tb.Message) {
 	score, _ := b.storage.GetUserScore(m.Sender.ID)
-	message := fmt.Sprintf("Bạn đã hoàn thành. Bạn trả lời đúng: %d/5 câu hỏi.\n", score.Score)
+	message := fmt.Sprintf("Con đã trả lời đúng: %d/5 câu hỏi.\n", score.Score)
 	if score.Score == 5 {
-		message += fmt.Sprintf("Nhập 4 chữ số để quay số may mắn.")
+		message += fmt.Sprintf("Thông minh quá. Nhập 4 chữ số để Bụt quay số may mắn nào.")
 		updateCurrentCommand("lucky", m)
 	} else {
-		message += fmt.Sprintf("Rất tiếc bạn chưa đủ điều kiện quay số may mắn. Thử lại để đạt mức điểm cao hơn: /start")
+		message += fmt.Sprintf("Tiếc quá cơ, con chưa trả lời được cả 5 câu hỏi. Thử lại để đạt mức điểm cao hơn: /start")
 	}
 
 	b.bot.Send(m.Chat, message,
@@ -438,7 +556,7 @@ func (b Bot) handleAnswer(m *tb.Message, option int) {
 	current := questions[currentQuestion.Rands[currentQuestion.CurrentQuestion]]
 	log.Printf("%+v", current)
 	if option+1 > len(current.Options) {
-		b.bot.Send(m.Chat, fmt.Sprintf("Câu hỏi không có phương án bạn chọn."))
+		b.bot.Send(m.Chat, fmt.Sprintf("Câu hỏi không có phương án con chọn."))
 		return
 	}
 
@@ -450,6 +568,7 @@ func (b Bot) handleAnswer(m *tb.Message, option int) {
 			UserName:  m.Sender.Username,
 			FirstName: m.Sender.FirstName,
 			LastName:  m.Sender.LastName,
+			Valid:     true,
 		}
 	}
 	if option == current.Answer {
@@ -483,18 +602,18 @@ func (b Bot) checkRequirement(m *tb.Message) bool {
 func (b Bot) handleStart(m *tb.Message) {
 	// make sure user chat private to answer the question
 	if !m.Private() {
-		b.bot.Reply(m, "Bạn cần chat riêng với @KyberQuestionBot để trả lời câu hỏi vào tham gia bốc thăm may mắn :D")
+		b.bot.Reply(m, "Con cần chat riêng với @KyberQuestionBot để trả lời câu hỏi vào tham gia bốc thăm may mắn :D")
 		return
 	}
 
 	// make sure user joined require group to answer the question
 	qualified := b.checkRequirement(m)
 	if !qualified {
-		b.bot.Send(m.Chat, fmt.Sprintf("Bạn cần tham gia group @%s để có thể tham gia chương trình.", chatGroup))
+		b.bot.Send(m.Chat, fmt.Sprintf("Con cần tham gia group @%s để có thể tham gia chương trình.", chatGroup))
 		return
 	}
 
-	message := "Bạn cần trả lời đúng cả 5 câu hỏi để được tham gia bốc thăm may mắn."
+	message := "Con chỉ cần trả lời đúng 5 câu hỏi đơn giản của Bụt để được tham gia bốc thăm may mắn."
 	b.bot.Send(m.Chat, message)
 	// random a new sequence of question
 	rand.Seed(time.Now().UnixNano())
@@ -522,7 +641,7 @@ func (b Bot) handleWho(m *tb.Message) {
 	if payload == "" {
 		if m.Private() {
 			updateCurrentCommand("who", m)
-			b.bot.Reply(m, "Bạn muốn check người may mắn cho số nào?")
+			b.bot.Reply(m, "Con muốn kiểm người may mắn cho số nào?")
 		} else {
 			b.bot.Reply(m, "Sử dụng cú pháp /who [số] để kiểm tra số may mắn trong group nhé")
 		}
