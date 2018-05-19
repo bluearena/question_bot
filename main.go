@@ -452,6 +452,10 @@ func (b Bot) handleInvited(m *tb.Message) {
 }
 
 func (b Bot) handleUpateLucky(m *tb.Message) {
+	if time.Now().Unix() > b.deadline {
+		b.bot.Reply(m, "Bụt rất tiếc, thời gian tham gia chương trình đã hết.")
+		return
+	}
 	text := strings.TrimSpace(m.Text)
 	matched, err := regexp.MatchString(`^\d{4,4}$`, text)
 	if err != nil {
