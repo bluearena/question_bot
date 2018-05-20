@@ -342,6 +342,12 @@ func (b Bot) handleAdd(m *tb.Message) {
 		b.bot.Reply(m, "/add riêng cho Bụt để Bụt thêm số may mắn cho.")
 		return
 	}
+	score, _ := b.storage.GetUserScore(m.Sender.ID)
+	if score.Score == 5 && score.LuckyNumber == "" {
+		updateCurrentCommand("invited", m)
+		b.bot.Send(m.Sender, "Điền 4 chữ số may mắn: ")
+		return
+	}
 	_, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 	if err == nil {
 		updateCurrentCommand("invited", m)
@@ -515,19 +521,25 @@ func (b Bot) handleInvited(m *tb.Message) {
 	if !matched {
 		b.bot.Reply(m, fmt.Sprintf("Con phải gửi 4 chữ số thì Bụt mới lưu lại được."))
 	} else {
-		invitedUser, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
-		if err != nil {
-			log.Printf("Cannot get invited: %s", err.Error())
-		}
 		if b.checkDuplicate(m.Sender.ID, text) {
 			b.handleDuplicate(m, text)
 			updateCurrentCommand("", m)
 			return
 		}
-		invitedUser[0].LuckyNumber = text
-		err = b.storage.UpdateInviteUser(invitedUser[0])
+		score, _ := b.storage.GetUserScore(m.Sender.ID)
+		invitedUser, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 		if err != nil {
-			log.Printf("Cannot update lucky number: %s", err.Error())
+			log.Printf("Cannot get invited: %s", err.Error())
+		}
+		if score.Score == 5 && score.LuckyNumber == "" {
+			score.LuckyNumber = text
+			b.storage.UpdateScore(m.Sender.ID, score)
+		} else {
+			invitedUser[0].LuckyNumber = text
+			err = b.storage.UpdateInviteUser(invitedUser[0])
+			if err != nil {
+				log.Printf("Cannot update lucky number: %s", err.Error())
+			}
 		}
 		message := fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé. ", text)
 		if len(invitedUser) > 1 {
