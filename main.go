@@ -275,11 +275,15 @@ func (b Bot) handleUserJoined(m *tb.Message) {
 }
 
 func (b Bot) handleMe(m *tb.Message) {
+	score, _ := b.storage.GetUserScore(m.Sender.ID)
+	if score.ID == 0 {
+		b.bot.Reply(m, "Con chưa tham gia trả lời câu hỏi. Hãy chat /start riêng với Bụt để tham gia trả lời câu hỏi và có cơ hội nhận quà nhé.")
+		return
+	}
 	if !m.Private() {
 		b.bot.Reply(m, "Bụt sẽ trả lời riêng cho con.")
 	}
 	message := ""
-	score, _ := b.storage.GetUserScore(m.Sender.ID)
 	invites, err := b.storage.GetInvitedUser(m.Sender.ID)
 	log.Printf("Score: %+v", score)
 	if (score.ID != 0 && score.Valid == false) || (err == nil && invites[0].Valid == false) {
