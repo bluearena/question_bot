@@ -40,6 +40,7 @@ var chatGroup string
 // map[chatID]questionID
 var questions Questions
 var lucky map[string]string
+var selectedNumber map[string]string
 var replyKeysTwo [][]tb.ReplyButton
 var replyKeysFour [][]tb.ReplyButton
 
@@ -152,6 +153,14 @@ func main() {
 		mybot.handlePrize(m)
 	})
 
+	mybot.bot.Handle("/yes", func(m *tb.Message) {
+		mybot.handleYes(m)
+	})
+
+	mybot.bot.Handle("/no", func(m *tb.Message) {
+		mybot.handleNo(m)
+	})
+
 	mybot.bot.Start()
 }
 
@@ -188,6 +197,13 @@ func updateCurrentCommand(command string, m *tb.Message) {
 		lucky = map[string]string{}
 	}
 	lucky[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] = command
+}
+
+func updateSelectedNumber(lucky string, m *tb.Message) {
+	if len(selectedNumber) == 0 {
+		selectedNumber = map[string]string{}
+	}
+	selectedNumber[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] = lucky
 }
 
 func (b Bot) activateUser(userID int) error {
@@ -432,9 +448,62 @@ func (b Bot) handleDefault(m *tb.Message) {
 	}
 }
 
+func (b Bot) checkDuplicate(userID int, lucky string) bool {
+	score, _ := b.storage.GetUserScore(userID)
+	if score.LuckyNumber == lucky {
+		return true
+	}
+	invitedUsers, _ := b.storage.GetInvitedUser(userID)
+	for _, user := range invitedUsers {
+		if user.LuckyNumber == lucky {
+			return true
+		}
+	}
+	return false
+}
+
+func (b Bot) handleDuplicate(m *tb.Message, lucky string) {
+	message := "Con đã chọn số này, con có chắc vẫn muốn chọn số này lần nữa? /yes để tiếp tục chọn /no để chọn lại số khác."
+	updateSelectedNumber(lucky, m)
+	b.bot.Reply(m, message)
+}
+
+func (b Bot) handleYes(m *tb.Message) {
+	if !m.Private() {
+		return
+	}
+	if len(selectedNumber) == 0 {
+		return
+	}
+	lucky := selectedNumber[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)]
+	if lucky == "" {
+		return
+	}
+	invitedUser, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
+	if err != nil {
+		log.Printf("Cannot get invited: %s", err.Error())
+	}
+	invitedUser[0].LuckyNumber = lucky
+	err = b.storage.UpdateInviteUser(invitedUser[0])
+	if err != nil {
+		log.Printf("Cannot update lucky number: %s", err.Error())
+	}
+	message := fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé. ", lucky)
+	if len(invitedUser) > 1 {
+		message += fmt.Sprintf("Con còn %d vé, /add để chọn số may mắn nhé.", len(invitedUser)-1)
+	}
+	b.bot.Send(m.Chat, message)
+}
+
+func (b Bot) handleNo(m *tb.Message) {
+	updateSelectedNumber("", m)
+	updateCurrentCommand("invited", m)
+	message := "Số con chọn đã bị hủy, hãy chọn số may mắn mới."
+	b.bot.Reply(m, message)
+}
+
 func (b Bot) handleInvited(m *tb.Message) {
 	text := strings.TrimSpace(m.Text)
-	log.Printf("Invited: %s", text)
 	matched, err := regexp.MatchString(`^\d{4,4}$`, text)
 	if err != nil {
 		log.Printf("Cannot match: %s", err.Error())
@@ -444,7 +513,12 @@ func (b Bot) handleInvited(m *tb.Message) {
 	} else {
 		invitedUser, err := b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
 		if err != nil {
-			log.Printf("Cannot get score: %s", err.Error())
+			log.Printf("Cannot get invited: %s", err.Error())
+		}
+		if b.checkDuplicate(m.Sender.ID, text) {
+			b.handleDuplicate(m, text)
+			updateCurrentCommand("", m)
+			return
 		}
 		invitedUser[0].LuckyNumber = text
 		err = b.storage.UpdateInviteUser(invitedUser[0])
@@ -493,7 +567,6 @@ func (b Bot) handleUpdateLucky(m *tb.Message) {
 func (b Bot) handleCheckWho(m *tb.Message, luckyNumber string) {
 	luckyStr := strings.TrimSpace(luckyNumber)
 	matched, err := regexp.MatchString(`^\d{4,4}$`, luckyStr)
-	log.Printf("%+v", matched)
 	if err != nil {
 		log.Printf("Cannot match lucky string: %s", err.Error())
 	}
