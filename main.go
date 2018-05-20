@@ -238,6 +238,9 @@ func (b Bot) deactivateUser(userID int) error {
 }
 
 func (b Bot) handleUserJoined(m *tb.Message) {
+	if time.Now().Unix() > b.deadline {
+		return
+	}
 	if m.Chat.Username != chatGroup {
 		return
 	}
