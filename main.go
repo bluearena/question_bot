@@ -15,8 +15,9 @@ import (
 
 // BotConfig config for bot
 type BotConfig struct {
-	Key      string `json:"bot_key"`
-	Deadline int64  `json:"deadline"`
+	Key       string `json:"bot_key"`
+	Deadline  int64  `json:"deadline"`
+	ChatGroup string `json:"chatgroup"`
 }
 
 // Bot object
@@ -34,7 +35,7 @@ type Questions []struct {
 }
 
 // const for chat group
-const chatGroup string = "testquestion1234"
+var chatGroup string
 
 // map[chatID]questionID
 var questions Questions
@@ -67,6 +68,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds | log.Lshortfile)
 	path := "./config.json"
 	botConfig, err := readConfigFromFile(path)
+	chatGroup = botConfig.ChatGroup
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -414,7 +416,7 @@ func (b Bot) initReplyKeys(questionOptions []string) [][]tb.ReplyButton {
 func (b Bot) handleText(m *tb.Message) {
 	switch lucky[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] {
 	case "lucky":
-		b.handleUpateLucky(m)
+		b.handleUpdateLucky(m)
 	case "who":
 		b.handleCheckWho(m, m.Text)
 	case "invited":
@@ -449,16 +451,16 @@ func (b Bot) handleInvited(m *tb.Message) {
 		if err != nil {
 			log.Printf("Cannot update lucky number: %s", err.Error())
 		}
-		message := fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé.", text)
+		message := fmt.Sprintf("Số may mắn con đã chọn là: %s, Bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc nhé. ", text)
 		if len(invitedUser) > 1 {
-			message += fmt.Sprintf("Con còn %d vé chọn số may mắn nhé.", len(invitedUser)-1)
+			message += fmt.Sprintf("Con còn %d vé, /add để chọn số may mắn nhé.", len(invitedUser)-1)
 		}
 		b.bot.Send(m.Chat, message)
 		updateCurrentCommand("", m)
 	}
 }
 
-func (b Bot) handleUpateLucky(m *tb.Message) {
+func (b Bot) handleUpdateLucky(m *tb.Message) {
 	if time.Now().Unix() > b.deadline {
 		b.bot.Reply(m, "Bụt rất tiếc, thời gian tham gia chương trình đã hết.")
 		return
@@ -481,7 +483,9 @@ func (b Bot) handleUpateLucky(m *tb.Message) {
 			log.Printf("Cannot update lucky number: %s", err.Error())
 		}
 		score, _ = b.storage.GetUserScore(m.Sender.ID)
-		b.bot.Send(m.Chat, fmt.Sprintf("Số may mắn con đã chọn là: %s, bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc.", score.LuckyNumber))
+		message := fmt.Sprintf("Số may mắn con đã chọn là: %s, bụt sẽ quay số may mắn và thông báo người trúng thưởng khi chương trình kết thúc.", score.LuckyNumber)
+		message += fmt.Sprintf("Con hãy mời thêm bạn nào vào @%s để nhận được thêm vé may mắn nhé 🤗.", chatGroup)
+		b.bot.Send(m.Chat, message)
 		updateCurrentCommand("", m)
 	}
 }
