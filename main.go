@@ -496,6 +496,10 @@ func (b Bot) handleYes(m *tb.Message) {
 }
 
 func (b Bot) handleNo(m *tb.Message) {
+	lucky := selectedNumber[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)]
+	if lucky == "" {
+		return
+	}
 	updateSelectedNumber("", m)
 	updateCurrentCommand("invited", m)
 	message := "Số con chọn đã bị hủy, hãy chọn số may mắn mới."
