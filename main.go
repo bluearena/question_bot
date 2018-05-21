@@ -740,7 +740,7 @@ func (b Bot) handleStart(m *tb.Message) {
 	}
 	// make sure user chat private to answer the question
 	if !m.Private() {
-		b.bot.Reply(m, "Con cần chat riêng với @KyberQuestionBot để trả lời câu hỏi vào tham gia bốc thăm may mắn :D")
+		b.bot.Reply(m, "Con cần chat riêng với @KyberOngBot để trả lời câu hỏi vào tham gia bốc thăm may mắn :D")
 		return
 	}
 
