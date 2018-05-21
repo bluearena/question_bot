@@ -8,7 +8,8 @@ Before build bot, remember to prepare 2 files: config.json and questions.json fo
 ### Docker
 
 ```
-    docker build -t question .
+    <!-- docker build -t question . -->
+    docker-compose build
 ```
 
 ## Run
@@ -17,5 +18,6 @@ Before build bot, remember to prepare 2 files: config.json and questions.json fo
 
 tee for logging purpose
 ```
-    docker run question question_bot | tee log.log
+    <!-- docker run question question_bot | tee log.log -->
+    docker-compose up
 ```

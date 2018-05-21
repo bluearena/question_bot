@@ -264,7 +264,8 @@ func (b Bot) checkAlreadyInvited(user tb.User, m *tb.Message) {
 	if err == nil {
 		if invitedUser.UserID != m.Sender.ID {
 			b.storage.RemoveUser(user.ID)
-			message := fmt.Sprintf("Bạn [%s](tg://user?id=%d đã rời khỏi group và được mời lại bởi 1 người khác, số may mắn con chọn cho bạn này không còn giá trị nữa.", invitedUser.InvitedName, invitedUser.InvitedID)
+			name := strings.TrimSpace(invitedUser.InvitedName)
+			message := fmt.Sprintf("Bạn [%s](tg://user?id=%d đã rời khỏi group và được mời lại bởi 1 người khác, số may mắn con chọn cho bạn này không còn giá trị nữa.", name, invitedUser.InvitedID)
 			user := &tb.User{
 				ID: invitedUser.UserID,
 			}
@@ -845,8 +846,9 @@ func (b Bot) handleClose(m *tb.Message) {
 				}
 				b.storage.RemoveUser(user.InvitedID)
 				b.storage.UpdateTop(user.UserID, user.Name, -1)
+				name := strings.TrimSpace(user.InvitedName)
 				message := fmt.Sprintf("[%s](tg://user?id=%d) đã rời khỏi group @%s. Số may mắn con chọn cho [%s](tg://user?id=%d) đã không còn hiệu lực nữa.",
-					user.InvitedName, user.InvitedID, chatGroup, user.InvitedName, user.InvitedID)
+					name, user.InvitedID, chatGroup, name, user.InvitedID)
 				receiver := &tb.User{
 					ID: user.UserID,
 				}
@@ -854,4 +856,5 @@ func (b Bot) handleClose(m *tb.Message) {
 			}
 		}
 	}
+	b.bot.Send(m.Sender, "Đã remove xong những user không thuộc group.")
 }
