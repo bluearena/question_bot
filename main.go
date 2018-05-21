@@ -174,7 +174,7 @@ func (b Bot) handlePrize(m *tb.Message) {
 		⭐️️️ Ta có *15 giải* cho những người có vé số may mắn trong đó:
 
 			💰 5 Giải đặc biệt mỗi giải 100 KNC
-			💰 10 Giải mỗi giải 10 KNC
+			💰 10 Giải "suýt đặc biệt" mỗi giải 10 KNC
 		
 		⭐ Ngoài ra còn có *5 Giải* "cống hiến" mỗi giải là 40 KNC dành cho 5 thành viên mời được nhiều bạn tham gia nhất
 
