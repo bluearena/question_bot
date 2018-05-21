@@ -137,9 +137,9 @@ func main() {
 		mybot.handleUserJoined(m)
 	})
 
-	mybot.bot.Handle(tb.OnUserLeft, func(m *tb.Message) {
-		mybot.handleUserLeft(m)
-	})
+	// mybot.bot.Handle(tb.OnUserLeft, func(m *tb.Message) {
+	// 	mybot.handleUserLeft(m)
+	// })
 
 	mybot.bot.Handle("/top", func(m *tb.Message) {
 		mybot.handleTop(m)
