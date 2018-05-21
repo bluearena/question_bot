@@ -264,6 +264,7 @@ func (b Bot) checkAlreadyInvited(user tb.User, m *tb.Message) {
 	if err == nil {
 		if invitedUser.UserID != m.Sender.ID {
 			b.storage.RemoveUser(user.ID)
+			b.storage.UpdateTop(invitedUser.UserID, invitedUser.Name, -1)
 			name := strings.TrimSpace(invitedUser.InvitedName)
 			message := fmt.Sprintf("Bạn [%s](tg://user?id=%d đã rời khỏi group và được mời lại bởi 1 người khác, số may mắn con chọn cho bạn này không còn giá trị nữa.", name, invitedUser.InvitedID)
 			user := &tb.User{
