@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -165,6 +166,10 @@ func main() {
 		mybot.handleClose(m)
 	})
 
+	mybot.bot.Handle("/stat", func(m *tb.Message) {
+		mybot.handleStat(m)
+	})
+
 	mybot.bot.Start()
 }
 
@@ -270,7 +275,9 @@ func (b Bot) checkAlreadyInvited(user tb.User, m *tb.Message) {
 			user := &tb.User{
 				ID: invitedUser.UserID,
 			}
-			b.bot.Send(user, message)
+			b.bot.Send(user, message, &tb.SendOptions{
+				ParseMode: tb.ModeMarkdown,
+			})
 		}
 	}
 }
@@ -853,9 +860,63 @@ func (b Bot) handleClose(m *tb.Message) {
 				receiver := &tb.User{
 					ID: user.UserID,
 				}
-				b.bot.Send(receiver, message)
+				b.bot.Send(receiver, message, &tb.SendOptions{
+					ParseMode: tb.ModeMarkdown,
+				})
 			}
 		}
 	}
 	b.bot.Send(m.Sender, "Đã remove xong những user không thuộc group.")
+}
+
+func (b Bot) handleStat(m *tb.Message) {
+	chat, err := b.bot.ChatByID("@" + chatGroup)
+	if err != nil {
+		log.Printf("Cannot get chat by id %s: %s", chatGroup, err.Error())
+		return
+	}
+	qualified, err := b.bot.ChatMemberOf(chat, m.Sender)
+	if err != nil {
+		log.Printf("Cannot get chat member of: %s", err.Error())
+		return
+	}
+	if qualified.Role == tb.Creator || qualified.Role == tb.Administrator {
+		payload := m.Payload
+		if payload == "" {
+			scores, _ := b.storage.GetAllUserScore()
+			scoreNumber := len(scores)
+
+			inviteUsers, _ := b.storage.GetAllInvitedUser()
+			inviteNumber := len(inviteUsers)
+
+			message := fmt.Sprintf("Số lượng user tham gia trả lời câu hỏi: %d", scoreNumber)
+			message += fmt.Sprintf("Số lượng user đã được invite vào group: %d", inviteNumber)
+			b.bot.Send(m.Chat, message)
+		} else {
+			payload := strings.TrimSpace(payload)
+			userID, err := strconv.Atoi(payload)
+			if err != nil {
+				b.bot.Send(m.Chat, err.Error())
+				return
+			}
+			score, _ := b.storage.GetUserScore(userID)
+			message := ""
+			if score.Valid {
+				message += fmt.Sprintf("[%s](tg://user?id=%d) đã ghi được %d điểm, số may mắn: %s", score.UserName, score.ID, score.Score, score.LuckyNumber)
+
+				inviteUsers, _ := b.storage.GetInvitedUser(userID)
+				for _, user := range inviteUsers {
+					if user.Valid {
+						message += fmt.Sprintf("[%s](tg://user?id=%d) - %s", user.InvitedName, user.InvitedID, user.LuckyNumber)
+					}
+				}
+			} else {
+				message += "Người dùng này đã rời khỏi group."
+			}
+
+			b.bot.Send(m.Chat, message, &tb.SendOptions{
+				ParseMode: tb.ModeMarkdown,
+			})
+		}
+	}
 }
