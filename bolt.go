@@ -71,7 +71,7 @@ type QuestionStorage struct {
 
 // NewBoltStorage init storage
 func NewBoltStorage() (*QuestionStorage, error) {
-	db, err := storm.Open("questions.db")
+	db, err := storm.Open("/db/questions.db")
 
 	if err != nil {
 		log.Printf("Cannot open db: %s", err.Error())
@@ -381,4 +381,24 @@ func (storage *QuestionStorage) UpdateTopObject(top Top) error {
 		}
 	}
 	return err
+}
+
+// GetAllInvitedUser Get all invited users
+func (storage *QuestionStorage) GetAllInvitedUser() ([]InviteUser, error) {
+	var users []InviteUser
+	err := storage.db.All(&users)
+	if err != nil {
+		log.Printf("Cannot get all invited user: %s", err.Error())
+	}
+	return users, err
+}
+
+// GetAllScore Get all user score
+func (storage *QuestionStorage) GetAllUserScore() ([]Score, error) {
+	var scores []Score
+	err := storage.db.All(&scores)
+	if err != nil {
+		log.Printf("Cannot get all scores: %s", err.Error())
+	}
+	return scores, err
 }

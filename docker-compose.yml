@@ -1,0 +1,8 @@
+version: '2'
+services:
+  question_botquestion_bot:
+    build: .
+    image: questions 
+    volumes:
+      - ./db:/db
+    command: question_bot 

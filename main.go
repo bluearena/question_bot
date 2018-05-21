@@ -161,6 +161,10 @@ func main() {
 		mybot.handleNo(m)
 	})
 
+	mybot.bot.Handle("/close", func(m *tb.Message) {
+		mybot.handleClose(m)
+	})
+
 	mybot.bot.Start()
 }
 
@@ -255,6 +259,20 @@ func (b Bot) deactivateUser(userID int) error {
 	return err
 }
 
+func (b Bot) checkAlreadyInvited(user tb.User, m *tb.Message) {
+	invitedUser, err := b.storage.GetInvitedUserByInvitedID(user.ID)
+	if err == nil {
+		if invitedUser.UserID != m.Sender.ID {
+			b.storage.RemoveUser(user.ID)
+			message := fmt.Sprintf("Bạn [%s](tg://user?id=%d đã rời khỏi group và được mời lại bởi 1 người khác, số may mắn con chọn cho bạn này không còn giá trị nữa.", invitedUser.InvitedName, invitedUser.InvitedID)
+			user := &tb.User{
+				ID: invitedUser.UserID,
+			}
+			b.bot.Send(user, message)
+		}
+	}
+}
+
 func (b Bot) handleUserJoined(m *tb.Message) {
 	if time.Now().Unix() > b.deadline {
 		return
@@ -268,6 +286,7 @@ func (b Bot) handleUserJoined(m *tb.Message) {
 	}
 	message := "Con đã add "
 	for _, user := range m.UsersJoined {
+		b.checkAlreadyInvited(user, m)
 		name := fmt.Sprintf("%s %s", m.Sender.FirstName, m.Sender.LastName)
 		invitedName := fmt.Sprintf("%s %s", user.FirstName, user.LastName)
 		message += fmt.Sprintf("[%s](tg://user?id=%d)", invitedName, m.UserJoined.ID)
@@ -764,5 +783,61 @@ func (b Bot) handleWho(m *tb.Message) {
 		}
 	} else {
 		b.handleCheckWho(m, payload)
+	}
+}
+
+func (b Bot) handleClose(m *tb.Message) {
+	chat, err := b.bot.ChatByID("@" + chatGroup)
+	if err != nil {
+		log.Printf("Cannot get chat by id %s: %s", chatGroup, err.Error())
+		return
+	}
+	qualified, err := b.bot.ChatMemberOf(chat, m.Sender)
+	if err != nil {
+		log.Printf("Cannot get chat member of: %s", err.Error())
+		return
+	}
+	if qualified.Role == tb.Creator || qualified.Role == tb.Administrator {
+		// validate user score
+		scores, err := b.storage.GetAllUserScore()
+		if err == nil {
+			for _, score := range scores {
+				u := &tb.User{
+					ID: score.ID,
+				}
+				member, err := b.bot.ChatMemberOf(chat, u)
+				if err != nil {
+					continue
+				}
+				if member.Role == tb.Creator || member.Role == tb.Administrator || member.Role == tb.Member {
+					continue
+				}
+				score.Valid = false
+				b.storage.UpdateScore(score.ID, score)
+				top, err := b.storage.GetTopByUserID(score.ID)
+				if err == nil {
+					top.Valid = false
+					b.storage.UpdateTopObject(top)
+				}
+			}
+		}
+		// validate user invites
+		inviteUsers, err := b.storage.GetAllInvitedUser()
+		if err == nil {
+			for _, user := range inviteUsers {
+				u := &tb.User{
+					ID: user.InvitedID,
+				}
+				member, err := b.bot.ChatMemberOf(chat, u)
+				if err != nil {
+					continue
+				}
+				if member.Role == tb.Creator || member.Role == tb.Administrator || member.Role == tb.Member {
+					continue
+				}
+				b.storage.RemoveUser(user.InvitedID)
+				b.storage.UpdateTop(user.UserID, user.Name, -1)
+			}
+		}
 	}
 }
