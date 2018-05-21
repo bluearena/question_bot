@@ -802,6 +802,9 @@ func (b Bot) handleClose(m *tb.Message) {
 		scores, err := b.storage.GetAllUserScore()
 		if err == nil {
 			for _, score := range scores {
+				if !score.Valid {
+					continue
+				}
 				u := &tb.User{
 					ID: score.ID,
 				}
@@ -819,12 +822,17 @@ func (b Bot) handleClose(m *tb.Message) {
 					top.Valid = false
 					b.storage.UpdateTopObject(top)
 				}
+				message := fmt.Sprintf("Sao con lại rời khỏi group @%s. Buồn quá, Bụt phải cho con ra khỏi danh sách nhận quà rồi 😢", chatGroup)
+				b.bot.Send(u, message)
 			}
 		}
 		// validate user invites
 		inviteUsers, err := b.storage.GetAllInvitedUser()
 		if err == nil {
 			for _, user := range inviteUsers {
+				if !user.Valid {
+					continue
+				}
 				u := &tb.User{
 					ID: user.InvitedID,
 				}
@@ -837,6 +845,9 @@ func (b Bot) handleClose(m *tb.Message) {
 				}
 				b.storage.RemoveUser(user.InvitedID)
 				b.storage.UpdateTop(user.UserID, user.Name, -1)
+				message := fmt.Sprintf("[%s](tg://user?id=%d) đã rời khỏi group @%s. Số may mắn con chọn cho [%s](tg://user?id=%d) đã không còn hiệu lực nữa.",
+					user.InvitedName, user.InvitedID, chatGroup, user.InvitedName, user.InvitedID)
+				b.bot.Send(u, message)
 			}
 		}
 	}
