@@ -847,7 +847,10 @@ func (b Bot) handleClose(m *tb.Message) {
 				b.storage.UpdateTop(user.UserID, user.Name, -1)
 				message := fmt.Sprintf("[%s](tg://user?id=%d) đã rời khỏi group @%s. Số may mắn con chọn cho [%s](tg://user?id=%d) đã không còn hiệu lực nữa.",
 					user.InvitedName, user.InvitedID, chatGroup, user.InvitedName, user.InvitedID)
-				b.bot.Send(u, message)
+				receiver := &tb.User{
+					ID: user.UserID,
+				}
+				b.bot.Send(receiver, message)
 			}
 		}
 	}
