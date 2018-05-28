@@ -333,6 +333,7 @@ func (b Bot) handleMe(m *tb.Message) {
 		b.bot.Reply(m, "Bụt sẽ trả lời riêng cho con.")
 	}
 	message := ""
+	inviteMessage := []string{}
 	invites, err := b.storage.GetInvitedUser(m.Sender.ID)
 	log.Printf("Score: %+v", score)
 	if (score.ID != 0 && score.Valid == false) || (err == nil && invites[0].Valid == false) {
@@ -347,9 +348,9 @@ func (b Bot) handleMe(m *tb.Message) {
 		message += fmt.Sprintf("Con hãy mời thêm người bạn nào vào @%s để nhận được thêm vé may mắn nhé 🤗. \n", chatGroup)
 	} else {
 		message += fmt.Sprintf("Con đã mời: \n")
-		for _, user := range invites {
+		for index, user := range invites {
 			name := strings.TrimSpace(user.InvitedName)
-			message += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", name, user.InvitedID, user.LuckyNumber)
+			inviteMessage[index/100] += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", name, user.InvitedID, user.LuckyNumber)
 		}
 	}
 	_, err = b.storage.GetInvitedUserWithoutLuckyNumber(m.Sender.ID)
@@ -359,6 +360,13 @@ func (b Bot) handleMe(m *tb.Message) {
 	b.bot.Send(m.Sender, message, &tb.SendOptions{
 		ParseMode: tb.ModeMarkdown,
 	})
+	if len(inviteMessage) > 0 {
+		for _, me := range inviteMessage {
+			b.bot.Send(m.Sender, me, &tb.SendOptions{
+				ParseMode: tb.ModeMarkdown,
+			})
+		}
+	}
 }
 
 func (b Bot) handleAdd(m *tb.Message) {
