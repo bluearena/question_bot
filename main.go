@@ -632,6 +632,11 @@ func (b Bot) handleCheckWho(m *tb.Message, luckyNumber string) {
 				message = fmt.Sprintf("Danh sách những người đã chọn số %s: \n\n", luckyStr)
 			} else {
 				message = fmt.Sprintf("Chưa có ai chọn số %s, người chọn gần nhất là: \n\n", luckyStr)
+				newLucky := users[0].LuckyNumber
+				users, err = b.storage.Who(newLucky)
+				if err != nil && err.Error() != "not found" {
+					log.Printf("Cannot get user: %s", err.Error())
+				}
 			}
 		} else {
 			message = fmt.Sprintf("Chưa có ai trong danh sách.")
