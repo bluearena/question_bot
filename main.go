@@ -350,6 +350,9 @@ func (b Bot) handleMe(m *tb.Message) {
 		message += fmt.Sprintf("Con đã mời: \n")
 		for index, user := range invites {
 			name := strings.TrimSpace(user.InvitedName)
+			if len(inviteMessage) < (index/100)+1 {
+				inviteMessage = append(inviteMessage, "")
+			}
 			inviteMessage[index/100] += fmt.Sprintf("[%s](tg://user?id=%d), số may mắn: %s \n", name, user.InvitedID, user.LuckyNumber)
 		}
 	}
