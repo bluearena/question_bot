@@ -135,6 +135,7 @@ func (storage *QuestionStorage) RemoveScore(userID int) error {
 	return err
 }
 
+//Abs return absolute value of a number
 func Abs(x int) int {
 	if x < 0 {
 		return -x
@@ -150,11 +151,13 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	err := storage.db.Find("LuckyNumber", lucky, &scores)
 	if err != nil {
 		log.Printf("Cannot find lucky number: %s", err.Error())
+		return result, err
 	}
 
 	err = storage.db.Find("LuckyNumber", lucky, &inviteUsers)
 	if err != nil {
 		log.Printf("Cannot find lucky number from top: %s", err.Error())
+		return result, err
 	}
 	for _, score := range scores {
 		if score.Valid == false {
@@ -175,8 +178,6 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	}
 	storage.db.AllByIndex("LuckyNumber", &scores)
 	storage.db.AllByIndex("LuckyNumber", &inviteUsers)
-	log.Printf("Score: %+v", scores)
-	log.Printf("Invites: %+v", inviteUsers)
 	max := NewUser(0, "", "0000")
 	min := NewUser(0, "", "9999")
 	for _, score := range scores {
@@ -215,10 +216,6 @@ func (storage *QuestionStorage) Who(lucky string) ([]User, error) {
 	} else if max.ID != 0 {
 		result = append(result, max)
 	}
-	log.Printf("Lucky: %+v", lucky)
-	log.Printf("Min: %+v", min)
-	log.Printf("Max: %+v", max)
-	log.Printf("Result: %+v", result)
 	return result, err
 }
 
@@ -228,6 +225,7 @@ func (storage *QuestionStorage) GetCurrentQuestion(id int64) (Question, error) {
 	err := storage.db.One("ID", id, &question)
 	if err != nil {
 		log.Printf("Cannot get question: %s", err.Error())
+		return question, err
 	}
 	return question, err
 }
@@ -393,7 +391,7 @@ func (storage *QuestionStorage) GetAllInvitedUser() ([]InviteUser, error) {
 	return users, err
 }
 
-// GetAllScore Get all user score
+// GetAllUserScore Get all user score
 func (storage *QuestionStorage) GetAllUserScore() ([]Score, error) {
 	var scores []Score
 	err := storage.db.All(&scores)
